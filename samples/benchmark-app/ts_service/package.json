@@ -1,0 +1,12 @@
+{
+  "name": "ts-benchmark-service",
+  "version": "0.0.1",
+  "description": "Benchmark fixture (intentionally vulnerable + safe endpoints)",
+  "private": true,
+  "dependencies": {
+    "express": "^4.19.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

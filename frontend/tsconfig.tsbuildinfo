@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/api.ts","./src/main.tsx","./src/ui.tsx","./src/pages/Dashboard.tsx","./src/pages/NewScan.tsx","./src/pages/Quality.tsx","./src/pages/ScanDetail.tsx","./src/pages/Settings.tsx"],"version":"5.9.3"}
