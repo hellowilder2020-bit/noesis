@@ -84,7 +84,10 @@ def test_inspect_rejects_symlink_escape(client, test_scan_root):
     outside = test_scan_root.parent / "escape-target"
     outside.mkdir(exist_ok=True)
     link = test_scan_root / "escape-link"
-    link.symlink_to(outside, target_is_directory=True)
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable on this platform: {exc}")
     resp = client.post("/api/repositories/inspect", json={"path": "escape-link"})
     assert resp.status_code == 400
     assert "symbolic" in resp.json()["detail"].lower()

@@ -132,3 +132,67 @@ def test_scan_unavailable_scanner_still_completes(client, test_scan_root, tmp_pa
     detail = _wait_terminal(client, start.json()["id"])
     assert detail["status"] in {"completed", "completed_with_warnings"}
     assert detail["scanner_status"]["semgrep"]["status"] in {"ok", "unavailable"}
+
+
+def test_ai_investigation_produces_verified_findings(client, test_scan_root, monkeypatch):
+    """Full AI stage with a stubbed provider: verdicts stored, evidence verified."""
+    import json as jsonlib
+
+    import aipentester.services.investigator as inv
+    import aipentester.services.orchestrator as orch
+
+    repo = test_scan_root / "ai-app"
+    repo.mkdir()
+    (repo / "app.py").write_text(
+        "import os\n"
+        "def run(cmd):\n"
+        "    os.system(f'echo {cmd}')\n"
+    )
+
+    def fake_chat(settings, system, user):
+        return jsonlib.dumps({
+            "assessment": "confirmed_by_available_evidence",
+            "vulnerability_type": "command-injection",
+            "severity": "high",
+            "confidence": 0.9,
+            "explanation": "os.system with an f-string",
+            "remediation": "use subprocess with an argv list",
+            "uncertainty": "",
+            "evidence": [
+                {"path": "app.py", "start_line": 3, "end_line": 3,
+                 "excerpt": "os.system(f'echo {cmd}')"},
+            ],
+        })
+
+    monkeypatch.setattr(orch, "ai_ready", lambda s: True)
+    monkeypatch.setattr(inv, "ai_chat", fake_chat)
+
+    start = client.post("/api/scans", json={"path": "ai-app", "investigate": True})
+    assert start.status_code == 202, start.text
+    detail = _wait_terminal(client, start.json()["id"])
+    assert detail["status"] in {"completed", "completed_with_warnings"}, detail
+
+    ai_status = detail["ai_status"]
+    assert ai_status and ai_status["status"] in {"ok", "partial"}, ai_status
+    assert ai_status["investigated"] >= 1
+    assert detail["findings_count"] >= 1
+
+    findings = client.get(f"/api/scans/{detail['id']}/findings").json()
+    assert len(findings) == detail["findings_count"]
+    finding = findings[0]
+    assert finding["assessment"] == "confirmed_by_available_evidence"
+    assert finding["verification_status"] == "verified"
+    assert finding["evidence"], "verdict must cite real code"
+
+
+def test_ai_investigation_skipped_when_unconfigured(client, test_scan_root):
+    """No AI config -> honest skip, scan still completes."""
+    repo = test_scan_root / "no-ai-app"
+    repo.mkdir()
+    (repo / "app.py").write_text("print('x')\n")
+    start = client.post("/api/scans", json={"path": "no-ai-app", "investigate": True})
+    assert start.status_code == 202
+    detail = _wait_terminal(client, start.json()["id"])
+    assert detail["status"] == "completed_with_warnings"
+    assert detail["ai_status"] and detail["ai_status"]["status"] == "skipped"
+    assert any("AI investigation skipped" in w for w in detail["warnings"])

@@ -19,8 +19,23 @@ def _mk(root: Path, rel: str, content: str | bytes = "") -> Path:
     if isinstance(content, bytes):
         p.write_bytes(content)
     else:
-        p.write_text(content)
+        # newline="" keeps '\n' bytes identical on every platform (Windows
+        # text mode would otherwise translate to CRLF and change hashes).
+        p.write_text(content, newline="")
     return p
+
+
+def _symlink(link: Path, target: Path, *, is_dir: bool) -> None:
+    """Create a symlink, skipping the test when the OS forbids it.
+
+    Windows requires Developer Mode or an elevated shell for symlink
+    creation; the security behaviour itself is still covered by the
+    path-safety self-audit when run from an elevated prompt.
+    """
+    try:
+        link.symlink_to(target, target_is_directory=is_dir)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable on this platform: {exc}")
 
 
 @pytest.fixture()
@@ -64,7 +79,7 @@ def test_skips_symlinks(tmp_path: Path, base_settings: Settings) -> None:
     _mk(repo, "main.py", "x = 1\n")
     outside = tmp_path / "outside"
     outside.mkdir()
-    (repo / "danger").symlink_to(outside, target_is_directory=True)
+    _symlink(repo / "danger", outside, is_dir=True)
     inv = inventory_repository(repo, base_settings)
     assert [f.path for f in inv.files] == ["main.py"]
     assert inv.skipped.get("symlinks") == 1
@@ -174,6 +189,11 @@ def test_sha256_recorded(tmp_path: Path, base_settings: Settings) -> None:
 def test_unreadable_dir_warns(tmp_path: Path, base_settings: Settings) -> None:
     import os
 
+    if os.name == "nt":
+        pytest.skip(
+            "Windows ACLs: chmod(0o000) does not make a directory unreadable "
+            "for the owner; permission-based skip behaviour is POSIX-only"
+        )
     if os.geteuid() == 0:
         pytest.skip("running as root: permission-based unreadability is ineffective")
     repo = tmp_path / "repo"

@@ -7,6 +7,14 @@ import pytest
 from aipentester.security.paths import SafePathError, validate_inside_root
 
 
+def _symlink(link, target) -> None:
+    """Create a symlink, skipping when the OS forbids it (Windows privileges)."""
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable on this platform: {exc}")
+
+
 def _mkdir(parent, name: str):
     p = parent / name
     p.mkdir(parents=True, exist_ok=True)
@@ -61,7 +69,7 @@ def test_rejects_symlink_escape(tmp_path, tmp_path_factory):
     outside = tmp_path.parent / "outside_link_target"
     outside.mkdir(exist_ok=True)
     link = tmp_path / "link-out"
-    link.symlink_to(outside, target_is_directory=True)
+    _symlink(link, outside)
     with pytest.raises(SafePathError):
         validate_inside_root(tmp_path, "link-out")
 
@@ -70,7 +78,7 @@ def test_rejects_symlink_escape_under_subpath(tmp_path, tmp_path_factory):
     nested = _mkdir(tmp_path, "nested")
     outside = tmp_path.parent / "outside_target"
     outside.mkdir(exist_ok=True)
-    (nested / "link").symlink_to(outside, target_is_directory=True)
+    _symlink(nested / "link", outside)
     with pytest.raises(SafePathError):
         validate_inside_root(tmp_path, "nested/link/../bait")
 

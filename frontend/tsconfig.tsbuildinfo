@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/api.ts","./src/main.tsx","./src/ui.tsx","./src/pages/Dashboard.tsx","./src/pages/NewScan.tsx","./src/pages/Quality.tsx","./src/pages/ScanDetail.tsx","./src/pages/Settings.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/ui.tsx","./src/pages/dashboard.tsx","./src/pages/newscan.tsx","./src/pages/quality.tsx","./src/pages/scandetail.tsx","./src/pages/settings.tsx"],"version":"5.9.3"}

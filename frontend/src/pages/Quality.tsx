@@ -28,10 +28,11 @@ const CATEGORY_INFO: Record<string, { title: string; blurb: string }> = {
 const CATEGORY_ORDER = ["environment", "path-safety", "discovery", "detection", "benchmark"];
 
 function CheckRow({ c }: { c: QualityCheck }) {
+  const icon = c.skipped ? "⏭️" : c.passed ? "✅" : "❌";
   return (
     <div className="check-row">
       <div className="check-head">
-        <span>{c.passed ? "✅" : "❌"}</span>
+        <span>{icon}</span>
         <span className="check-title">{c.title}</span>
         {c.detail ? null : null}
       </div>
@@ -84,7 +85,7 @@ export default function Quality() {
     }
   };
 
-  if (error) return <><h1 className="page-title">Health checks</h1><ErrorBanner error={error} /></>;
+  if (error) return <><h1 className="page-title">Scanner Health Check</h1><ErrorBanner error={error} /></>;
   if (!state) return <p><Spinner /> Loading health-check results…</p>;
 
   const groups = new Map<string, QualityCheck[]>();
@@ -96,7 +97,7 @@ export default function Quality() {
 
   return (
     <>
-      <h1 className="page-title">Health checks</h1>
+      <h1 className="page-title">Scanner Health Check</h1>
       <p className="page-sub">
         <b>What went right and what went wrong</b> — this page runs a live test
         battery against the scanning engine itself and reports honest pass/fail
@@ -125,6 +126,9 @@ export default function Quality() {
             {state.summary.failed > 0
               ? <span className="badge bad">❌ {state.summary.failed} failed</span>
               : <span className="badge plain">0 failed</span>}
+            {state.summary.skipped
+              ? <span className="badge plain">⏭️ {state.summary.skipped} skipped</span>
+              : null}
           </div>
         )}
       </div>
@@ -139,11 +143,14 @@ export default function Quality() {
           const info = CATEGORY_INFO[cat] ?? { title: cat, blurb: "" };
           const checks = groups.get(cat)!;
           const passed = checks.filter((c) => c.passed).length;
+          const skipped = checks.filter((c) => c.skipped).length;
           return (
             <div className="card" key={cat}>
               <div className="row spread">
                 <h3>{info.title}</h3>
-                <span className={`badge ${passed === checks.length ? "ok" : "warn"}`}>{passed}/{checks.length} passed</span>
+                <span className={`badge ${passed + skipped === checks.length ? "ok" : "warn"}`}>
+                  {passed}/{checks.length} passed{skipped > 0 ? ` (${skipped} skipped)` : ""}
+                </span>
               </div>
               <p className="hint">{info.blurb}</p>
               {checks.map((c) => <CheckRow key={c.id} c={c} />)}

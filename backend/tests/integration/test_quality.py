@@ -35,7 +35,7 @@ def test_quality_report_idle_then_full_run_passes(sample_client):
     checks = state["checks"]
     assert len(checks) >= 15  # environment + safety + discovery + detection + benchmark
 
-    failed = [c for c in checks if not c["passed"]]
+    failed = [c for c in checks if not c["passed"] and not c["skipped"]]
     assert failed == [], [(c["id"], c["actual"], c["detail"]) for c in failed]
 
     # Summary numbers must match the individual checks.

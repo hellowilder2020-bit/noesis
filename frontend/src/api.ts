@@ -73,6 +73,42 @@ export type Candidate = {
   rules: string[];
 };
 
+export type Finding = {
+  id: string;
+  candidate_id: string | null;
+  assessment: string | null;
+  verification_status: string | null;
+  vulnerability_type: string | null;
+  severity: string | null;
+  confidence: number | null;
+  affected_path: string | null;
+  start_line: number | null;
+  end_line: number | null;
+  explanation: string | null;
+  remediation: string | null;
+  uncertainty: string | null;
+  evidence: { path: string; start_line: number; end_line: number; excerpt: string }[];
+  checks: { evidence?: { path: string; status: string }[] } | null;
+  thinking: string | null;
+  provider: string | null;
+  model: string | null;
+  created_at: string | null;
+};
+
+export type AppSettings = {
+  scan_root: string;
+  data_dir: string;
+  semgrep: { installed: boolean; version: string | null; error: string | null };
+  ai: {
+    provider: string;
+    model: string | null;
+    base_url: string | null;
+    api_key_configured: boolean;
+    ready: boolean;
+  };
+  limits: Record<string, number>;
+};
+
 export type Dashboard = {
   total_scans: number;
   scans_running: number;
@@ -93,6 +129,7 @@ export type Dashboard = {
 export type QualityCheck = {
   id: string; title: string; category: string; description: string;
   passed: boolean; expected: string; actual: string; detail: string;
+  skipped?: boolean;
 };
 
 export type QualityState = {
@@ -101,7 +138,7 @@ export type QualityState = {
   finished_at?: string | null;
   duration_ms?: number | null;
   error?: string | null;
-  summary?: { total: number; passed: number; failed: number };
+  summary?: { total: number; passed: number; failed: number; skipped?: number };
   checks: QualityCheck[];
 };
 
@@ -143,9 +180,16 @@ export const api = {
   dashboard: () => request<Dashboard>("/api/dashboard"),
   scans: (limit = 50) => request<{ scans: ScanSummary[] }>(`/api/scans?limit=${limit}`),
   scan: (id: string) => request<ScanDetail>(`/api/scans/${id}`),
-  candidates: (id: string) => request<{ candidates: Candidate[] }>(`/api/scans/${id}/candidates`),
-  startScan: (path: string) =>
+  candidates: (id: string) => request<Candidate[]>(`/api/scans/${id}/candidates`),
+  findings: (id: string) => request<Finding[]>(`/api/scans/${id}/findings`),
+  startScan: (path: string, investigate = false) =>
     request<{ id: string; status: string; repository: string }>("/api/scans", {
+      method: "POST",
+      body: JSON.stringify({ path, investigate }),
+    }),
+  settings: () => request<AppSettings>("/api/settings"),
+  setScanRoot: (path: string) =>
+    request<{ scan_root: string }>("/api/settings/scan-root", {
       method: "POST",
       body: JSON.stringify({ path }),
     }),
