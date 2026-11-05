@@ -1,30 +1,30 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api, Candidate, Finding, ScanDetail as ScanDetailT } from "../api";
-import { EmptyState, ErrorBanner, Excerpt, SeverityBadge, Spinner, StatusPill } from "../ui";
+import { EmptyState, ErrorBanner, Excerpt, SeverityBadge, Spinner } from "../ui";
 
 const STAGE_LABEL: Record<string, string> = {
   start: "Kick-off",
-  discovery: "Reading the file tree",
-  scan: "Static analysis (Semgrep)",
-  persist: "Saving results",
+  discovery: "Reading File Tree",
+  scan: "Static Analysis",
+  persist: "Saving Results",
   done: "Finished",
-  ai: "AI investigation",
-  ai_investigation: "AI investigation",
+  ai: "AI Investigation",
+  ai_investigation: "AI Investigation",
 };
 
 const ASSESSMENT_LABEL: Record<string, { label: string; cls: string }> = {
-  confirmed_by_available_evidence: { label: "Confirmed by available evidence", cls: "bad" },
-  potential: { label: "Potential issue", cls: "warn" },
-  inconclusive: { label: "Inconclusive — needs a human", cls: "plain" },
-  false_positive: { label: "Likely false positive", cls: "ok" },
+  confirmed_by_available_evidence: { label: "Confirmed", cls: "bad" },
+  potential: { label: "Potential", cls: "warn" },
+  inconclusive: { label: "Inconclusive", cls: "plain" },
+  false_positive: { label: "False Positive", cls: "ok" },
 };
 
 const VERIFICATION_LABEL: Record<string, string> = {
-  verified: "✅ every citation checked against the real code",
-  partially_verified: "⚠️ some citations did not match the code",
-  unsupported: "❌ citations could not be verified — treat with caution",
-  uninvestigated: "— not investigated",
+  verified: "✓ Citations Verified",
+  partially_verified: "⚠ Partial Verification",
+  unsupported: "✗ Citations Unverified",
+  uninvestigated: "— Not Investigated",
 };
 
 function fmtDuration(ms: number) {
@@ -63,9 +63,7 @@ export default function ScanDetail() {
           try {
             const f = await api.findings(id);
             if (!cancelled) setFindings(f);
-          } catch {
-            /* findings endpoint may not exist for old scans */
-          }
+          } catch { /* findings endpoint may not exist for old scans */ }
         } else {
           setTimeout(load, 2000);
         }
@@ -80,7 +78,6 @@ export default function ScanDetail() {
   if (error) return <ErrorBanner error={error} />;
   if (!detail) return <p><Spinner /> Loading audit…</p>;
 
-  const problems = detail.events.filter((e) => e.level === "warning" || e.level === "error");
   const byFile = new Map<string, Candidate[]>();
   for (const c of candidates ?? []) {
     const list = byFile.get(c.path) ?? [];
@@ -88,279 +85,181 @@ export default function ScanDetail() {
     byFile.set(c.path, list);
   }
 
-  // ---- live phase tracker --------------------------------------------------
-  const hasDiscovery = detail.events.some((e) => e.stage === "discovery");
-  const hasScan = detail.events.some((e) => e.stage === "static_analysis");
-  const aiStage = detail.events.find((e) => e.stage === "ai_investigation");
-  const wantsAi = Boolean(detail.options?.investigate);
-  const terminal = !running;
-  const phases: { label: string; state: "done" | "active" | "todo" }[] = [
-    { label: "Discover files", state: hasDiscovery ? "done" : running ? "active" : "todo" },
-    { label: "Scan code", state: hasScan ? "done" : hasDiscovery ? (running ? "active" : "todo") : "todo" },
-    ...(wantsAi
-      ? [{
-          label: "AI investigation",
-          state: aiStage || (terminal && detail.ai_status && detail.ai_status.status !== "running")
-            ? "done" as const
-            : hasScan ? (running ? "active" as const : "todo" as const) : "todo" as const,
-        }]
-      : []),
-    {
-      label: terminal ? "Done" : "Finishing",
-      state: terminal ? "done" as const : "todo" as const,
-    },
-  ];
+  const pillColor = (status: string) => {
+    if (status === "completed") return "var(--ok)";
+    if (status === "failed") return "var(--bad)";
+    if (status === "running") return "var(--accent)";
+    return "var(--text-soft)";
+  };
 
   return (
     <>
-      <p><Link to="/">← Back to overview</Link></p>
-      <h1 className="page-title">Audit: {detail.repository}</h1>
-      <p className="page-sub row">
-        <StatusPill status={detail.status} />
-        <span className="muted small">
-          {running
-            ? (<><span className="pulse-dot" /> running for {elapsed}s</>)
-            : detail.duration_ms
-              ? `finished in ${fmtDuration(detail.duration_ms)}`
-              : null}
-        </span>
-        <span className="muted small">· {detail.candidates_count} candidates</span>
-        {detail.findings_count > 0 && (
-          <span className="muted small">· {detail.findings_count} AI findings</span>
-        )}
-      </p>
+      <div className="row spread" style={{ marginBottom: "var(--space-xl)", flexWrap: "wrap" }}>
+        <div>
+          <h1 className="page-title">Audit Detail</h1>
+          <p className="page-sub" style={{ margin: 0 }}>{detail.repository}</p>
+        </div>
+        <div className="row" style={{ gap: "var(--space-md)" }}>
+          <span className="status-pill"
+            style={{
+              borderColor: pillColor(detail.status),
+              color: pillColor(detail.status),
+            }}
+          >
+            {detail.status}
+          </span>
+          <span className="mono small muted">
+            {running ? `running ${elapsed}s` : detail.duration_ms ? `finished in ${fmtDuration(detail.duration_ms)}` : "—"}
+          </span>
+        </div>
+      </div>
 
       {location.state?.batchNote && (
-        <div className="callout info"><b>Batch audit started</b>{location.state.batchNote}</div>
+        <div className="tile">
+          <span className="badge ok">Batch Audit Started</span>
+          <span className="small muted" style={{ marginLeft: "var(--space-md)" }}>{location.state.batchNote}</span>
+        </div>
       )}
 
-      {/* ---- live phase tracker ------------------------------------------- */}
-      <div className="card">
-        <h3>Where is this audit?</h3>
-        <div className="phase-rail">
-          {phases.map((p, i) => (
-            <span key={p.label} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              {i > 0 && <span className="phase-arrow">→</span>}
-              <span className={`phase ${p.state}`}>
-                {p.state === "active" && <Spinner />}
-                {p.state === "done" && "✓"}
-                {p.label}
-              </span>
-            </span>
-          ))}
+      <div className="tile-grid">
+        {/* Stat tiles */}
+        <div className="tile stat accent">
+          <div className="big">{detail.total_files}</div>
+          <div className="label">Files Discovered</div>
         </div>
-        {running && (
-          <p className="hint" style={{ margin: "8px 0 0" }}>
-            This page updates itself automatically — candidates appear the moment
-            they are found.
-          </p>
-        )}
-      </div>
-
-      {/* ---- stat strip ---------------------------------------------------- */}
-      <div className="stat-strip">
-        <div className="card"><div className="big-num">{detail.total_files}</div><div className="stat-label">files discovered</div></div>
-        <div className="card"><div className="big-num">{detail.files_scanned}</div><div className="stat-label">files analysed</div></div>
-        <div className="card"><div className="big-num">{detail.candidates_count}</div><div className="stat-label">candidates</div></div>
-        <div className="card"><div className="big-num">{detail.findings_count}</div><div className="stat-label">AI findings</div></div>
-        <div className="card">
-          <div className="big-num">{running ? `${elapsed}s` : detail.duration_ms ? fmtDuration(detail.duration_ms) : "—"}</div>
-          <div className="stat-label">{running ? "elapsed" : "total time"}</div>
+        <div className="tile stat warn">
+          <div className="big">{detail.files_scanned}</div>
+          <div className="label">Files Analyzed</div>
         </div>
-      </div>
+        <div className="tile stat ok">
+          <div className="big">{detail.candidates_count}</div>
+          <div className="label">Candidates</div>
+        </div>
+        <div className="tile stat info">
+          <div className="big">{detail.findings_count}</div>
+          <div className="label">AI Findings</div>
+        </div>
 
-      {detail.status === "running" && (
-        <div className="callout info"><b>Audit in progress</b>First the file inventory is built, then the static scanner runs{wantsAi ? ", then the AI investigator reviews each candidate" : ""}. No need to refresh — this page follows along.</div>
-      )}
-      {detail.error && <div className="callout bad"><b>The audit stopped with an error</b>{detail.error}</div>}
-
-      <div className="card">
-        <h3>What happened step by step</h3>
-        <p className="hint">Plain-language timeline of this audit.</p>
-        <table className="data">
-          <thead><tr><th>Step</th><th>What happened</th><th>When</th></tr></thead>
-          <tbody>
-            {detail.events.map((e, i) => (
-              <tr key={i}>
-                <td style={{ whiteSpace: "nowrap", fontWeight: 600 }}>{STAGE_LABEL[e.stage] ?? e.stage}</td>
-                <td className="small" style={e.level === "error" ? { color: "var(--bad)" } : e.level === "warning" ? { color: "var(--warn)" } : undefined}>
-                  {e.message}
-                </td>
-                <td className="small muted" style={{ whiteSpace: "nowrap" }}>{new Date(e.ts).toLocaleTimeString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card">
-        <h3>What went right &amp; what went wrong in this run</h3>
-        <p className="hint">Anything the scanner could not do, or had to skip, is listed here — no silent failures.</p>
-        {problems.length === 0 ? (
-          <div className="callout" style={{ background: "var(--ok-soft)", borderColor: "#bbe7c8", color: "var(--ok)" }}>
-            <b>✅ Nothing went wrong this run</b>
-            All stages completed without warnings.
-          </div>
-        ) : (
-          <table className="data">
-            <thead><tr><th>Severity</th><th>Problem</th></tr></thead>
-            <tbody>
-              {problems.map((e, i) => (
-                <tr key={i}>
-                  <td><span className={`badge ${e.level === "error" ? "bad" : "warn"}`}>{e.level}</span></td>
-                  <td>{e.message}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {detail.warnings.length > 0 && detail.warnings.map((w, i) => (
-          <p key={i} className="small" style={{ color: "var(--warn)" }}>⚠ {w}</p>
-        ))}
-        <p className="small muted">
-          Also visible to the scanner: {detail.total_files} files in the project, {detail.files_scanned} analysed.
-        </p>
-      </div>
-
-      <div className="card">
-        <h3>🤖 AI investigation — evidence-based verdicts</h3>
-        <p className="hint">
-          The AI investigator reads the real code around each candidate and returns
-          a verdict. <b>Every citation is machine-checked against the file contents</b> —
-          verdicts citing code that doesn't exist are downgraded automatically.
-        </p>
-        {detail.ai_status && detail.ai_status.status === "skipped" ? (
-          <div className="callout info">
-            <b>AI investigation was skipped</b>
-            {String(detail.ai_status.reason ?? "AI provider is not configured.")} — the
-            static-analysis candidates below are still valid.
-          </div>
-        ) : findings === null ? (
-          detail.options?.investigate ? (
-            <p><Spinner /> Waiting for the AI investigator…</p>
-          ) : null
-        ) : findings.length === 0 ? (
-          detail.options?.investigate ? (
-            <div className="callout info">
-              <b>No AI findings were produced</b>
-              {detail.ai_status && detail.ai_status.error
-                ? `Reason: ${String(detail.ai_status.error)}`
-                : "The investigator returned no verdicts for this run."}
-            </div>
-          ) : null
-        ) : (
-          findings.map((f) => {
-            const a = ASSESSMENT_LABEL[f.assessment ?? ""] ?? { label: f.assessment ?? "?", cls: "plain" };
-            return (
-              <div key={f.id} style={{ marginBottom: 16, border: "1px solid var(--border)", borderRadius: 8, padding: 12 }}>
-                <div className="row spread" style={{ flexWrap: "wrap", gap: 8 }}>
-                  <div className="row" style={{ gap: 8 }}>
-                    <span className={`badge ${a.cls}`}>{a.label}</span>
-                    {f.severity ? <SeverityBadge severity={f.severity} /> : null}
-                    {f.confidence != null ? (
-                      <span className="badge plain">confidence {Math.round(f.confidence * 100)}%</span>
-                    ) : null}
-                  </div>
-                  <span className="small muted mono">
-                    {f.affected_path}{f.start_line ? `:${f.start_line}` : ""} · {f.provider}/{f.model}
+        {/* Event timeline tile */}
+        <div className="tile" style={{ gridColumn: "span 2" }}>
+          <h3>Event Timeline</h3>
+          <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+            {detail.events.length === 0 ? (
+              <div className="muted small">No events recorded.</div>
+            ) : (
+              detail.events.map((e, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", marginBottom: "var(--space-md)" }}>
+                  <span
+                    style={{ width: "8px", height: "8px", borderRadius: "50%", background: e.level === "error" ? "var(--bad)" : e.level === "warning" ? "var(--warn)" : "var(--ok)", flex: "0 0 auto" }}
+                  />
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)", minWidth: "90px" }}>
+                    {STAGE_LABEL[e.stage] ?? e.stage}
+                  </span>
+                  <span style={{ fontSize: "12px", color: "var(--text-soft)", flex: 1 }}>{e.message}</span>
+                  <span style={{ fontSize: "10px", color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginLeft: "var(--space-sm)" }}>
+                    {new Date(e.ts).toLocaleTimeString()}
                   </span>
                 </div>
-                {f.vulnerability_type ? (
-                  <p className="small" style={{ margin: "6px 0 0" }}>
-                    Type: <b>{f.vulnerability_type.replace(/-/g, " ")}</b>
-                  </p>
-                ) : null}
-                {f.explanation ? <p style={{ margin: "8px 0 0" }}>{f.explanation}</p> : null}
-                {f.remediation ? (
-                  <p className="small" style={{ margin: "8px 0 0", color: "var(--ok)" }}>
-                    <b>Fix:</b> {f.remediation}
-                  </p>
-                ) : null}
-                {f.uncertainty ? (
-                  <p className="small muted" style={{ margin: "8px 0 0" }}>
-                    <b>Uncertainty:</b> {f.uncertainty}
-                  </p>
-                ) : null}
-                {f.verification_status ? (
-                  <p className="small" style={{ margin: "8px 0 0" }}>
-                    <b>Evidence check:</b> {VERIFICATION_LABEL[f.verification_status] ?? f.verification_status}
-                  </p>
-                ) : null}
-                {f.thinking && (
-                  <details style={{ marginTop: 12 }}>
-                    <summary className="small" style={{ cursor: "pointer", color: "var(--muted)" }}>
-                      🧠 AI thinking (click to expand)
-                    </summary>
-                    <pre style={{ 
-                      marginTop: 8, 
-                      padding: 12, 
-                      background: "var(--bg-elevated)", 
-                      borderRadius: 6, 
-                      fontSize: 13,
-                      lineHeight: 1.5,
-                      whiteSpace: "pre-wrap",
-                      overflow: "auto"
-                    }}>
-                      {f.thinking}
-                    </pre>
-                  </details>
-                )}
-                {f.evidence.length > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    {f.evidence.map((ev, i) => (
-                      <div key={i} style={{ marginBottom: 6 }}>
-                        <div className="mono small muted">{ev.path}:{ev.start_line}-{ev.end_line}</div>
-                        <Excerpt code={ev.excerpt} startLine={ev.start_line} highlight={[ev.start_line, ev.end_line]} />
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Warnings tile */}
+        {detail.warnings.length > 0 && (
+          <div className="tile" style={{ gridColumn: "span 2" }}>
+            <h3>Warnings</h3>
+            {detail.warnings.map((w, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-sm)", marginBottom: "var(--space-md)" }}>
+                <span style={{ color: "var(--warn)", fontSize: 16, flex: "0 0 auto", marginTop: "2px" }}>⚠</span>
+                <span style={{ fontSize: "12px", color: "var(--text-soft)", lineHeight: 1.4 }}>{w}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* AI findings tile */}
+        <div className="tile" style={{ gridColumn: "span 2" }}>
+          <h3>AI Findings</h3>
+          {findings === null ? (
+            <p><Spinner /> Loading findings…</p>
+          ) : findings.length === 0 ? (
+            <div className="muted small">No AI findings produced.</div>
+          ) : (
+            <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+              {findings.map((f) => {
+                const a = ASSESSMENT_LABEL[f.assessment ?? ""] ?? { label: f.assessment ?? "?", cls: "plain" };
+                return (
+                  <div key={f.id} style={{ marginBottom: "var(--space-lg)", paddingBottom: "var(--space-lg)", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginBottom: "var(--space-sm)" }}>
+                      <span className={`badge ${a.cls}`}>{a.label}</span>
+                      {f.severity ? <SeverityBadge severity={f.severity} /> : null}
+                      <span style={{ fontSize: "11px", color: "var(--text-soft)" }}>{Math.round((f.confidence ?? 0) * 100)}% confidence</span>
+                    </div>
+                    <div className="mono small muted">{f.affected_path}{f.start_line ? `:${f.start_line}` : ""}</div>
+                    {f.explanation ? (
+                      <p style={{ margin: "var(--space-sm) 0 0", fontSize: "12px", color: "var(--text)", lineHeight: 1.6 }}>{f.explanation}</p>
+                    ) : null}
+                    {f.remediation ? (
+                      <div style={{ marginTop: "var(--space-sm)", padding: "var(--space-md)", background: "rgba(52,211,153,0.08)", borderRadius: "var(--radius-sm)" }}>
+                        <span style={{ display: "block", fontSize: "11px", color: "var(--ok)", textTransform: "uppercase", fontWeight: 700, letterSpacing: 0.06, marginBottom: "var(--space-xs)" }}>Fix</span>
+                        <span style={{ fontSize: "12px", color: "var(--text)", lineHeight: 1.6 }}>{f.remediation}</span>
                       </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Candidates tile */}
+        <div className="tile" style={{ gridColumn: "span 2" }}>
+          <h3>Candidates — Human Review</h3>
+          <p className="muted small" style={{ marginBottom: "var(--space-md)" }}>
+            Scanner-recognized patterns. Not yet confirmed vulnerabilities.
+          </p>
+          {candidates === null ? (
+            <p><Spinner /> Loading candidates…</p>
+          ) : candidates.length === 0 ? (
+            <div className="muted small">No candidates found.</div>
+          ) : (
+            Object.entries(Object.fromEntries(byFile)).map(([path, list]) => (
+              <div key={path} style={{ marginBottom: "var(--space-xl)" }}>
+                <div className="mono small muted">{path}</div>
+                <table className="data" style={{ marginTop: "var(--space-md)" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: "10%" }}>Line</th>
+                      <th style={{ width: "16%" }}>Severity</th>
+                      <th style={{ width: "20%" }}>Type</th>
+                      <th>Message</th>
+                      <th style={{ width: "18%" }}>Rule</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((c) => (
+                      <tr key={c.id} className="clickable" onClick={() => setOpen(open?.id === c.id ? null : c)}>
+                        <td className="mono">{c.start_line}</td>
+                        <td><SeverityBadge severity={c.severity} /></td>
+                        <td className="small">{c.vuln_type?.replace(/-/g, " ")}</td>
+                        <td className="small">{c.message}</td>
+                        <td className="mono small muted">{c.rule_id.split(".").pop()}</td>
+                      </tr>
                     ))}
+                  </tbody>
+                </table>
+                {open && list.some((c) => c.id === open.id) && (
+                  <div style={{ marginTop: "var(--space-sm)" }}>
+                    <Excerpt code={open.excerpt_redacted ?? ""} startLine={Math.max(1, open.start_line - 3)} highlight={[open.start_line, open.end_line]} />
                   </div>
                 )}
               </div>
-            );
-          })
-        )}
+            ))
+          )}
+        </div>
       </div>
 
-      <div className="card">
-        <h3>Candidates — things worth a human look</h3>
-        <p className="hint">
-          These are <b>not</b> confirmed vulnerabilities yet. Each is a pattern the
-          scanner recognised; a reviewer (or the AI investigator above) decides
-          whether it is exploitable. Click a row to peek at the code.
-        </p>
-        {candidates === null ? (
-          <p><Spinner /> Waiting for the scanner to finish…</p>
-        ) : candidates.length === 0 ? (
-          <EmptyState icon="🎉" title="No candidates found">
-            The scanner found nothing worth flagging in the files it could read.
-          </EmptyState>
-        ) : (
-          Object.entries(Object.fromEntries(byFile)).map(([path, list]) => (
-            <div key={path} style={{ marginBottom: 18 }}>
-              <div className="mono" style={{ fontWeight: 600, marginBottom: 4 }}>{path}</div>
-              <table className="data">
-                <thead><tr><th>Line</th><th>Severity</th><th>Type</th><th>Why it looks risky</th><th>Rule</th></tr></thead>
-                <tbody>
-                  {list.map((c) => (
-                    <tr key={c.id} className="clickable" onClick={() => setOpen(open?.id === c.id ? null : c)}>
-                      <td className="mono">{c.start_line}</td>
-                      <td><SeverityBadge severity={c.severity} /></td>
-                      <td className="small">{c.vuln_type?.replace(/-/g, " ")}</td>
-                      <td className="small">{c.message}</td>
-                      <td className="mono small muted">{c.rule_id.split(".").pop()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {open && list.some((c) => c.id === open.id) && (
-                <div style={{ marginTop: 6 }}>
-                  <Excerpt code={open.excerpt_redacted ?? ""} startLine={Math.max(1, open.start_line - 3)} highlight={[open.start_line, open.end_line]} />
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
     </>
   );
 }

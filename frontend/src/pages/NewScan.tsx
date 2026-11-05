@@ -20,6 +20,7 @@ export default function NewScan() {
   const [rootInput, setRootInput] = useState("");
   const [settingRoot, setSettingRoot] = useState(false);
   const [rootError, setRootError] = useState<unknown>(null);
+  const [rootSaved, setRootSaved] = useState(false);
 
   const [picked, setPicked] = useState<Picked[]>([]);
   const [investigate, setInvestigate] = useState(false);
@@ -30,7 +31,8 @@ export default function NewScan() {
   const navigate = useNavigate();
 
   const load = useCallback((path: string) => {
-    setListing(null); setBrowseError(null);
+    setListing(null);
+    setBrowseError(null);
     api.browse(path).then(setListing).catch(setBrowseError);
   }, []);
 
@@ -86,7 +88,8 @@ export default function NewScan() {
 
   const applyRoot = async () => {
     if (!rootInput.trim()) return;
-    setSettingRoot(true); setRootError(null);
+    setSettingRoot(true);
+    setRootError(null);
     try {
       const res = await api.setScanRoot(rootInput.trim());
       setScanRoot(res.scan_root);
@@ -94,6 +97,7 @@ export default function NewScan() {
       setShowRootEditor(false);
       setDir("");
       setPicked([]);
+      setRootSaved(true);
       load("");
     } catch (e) {
       setRootError(e);
@@ -104,7 +108,8 @@ export default function NewScan() {
 
   const startAudit = async () => {
     if (picked.length === 0) return;
-    setStarting(true); setStartError(null);
+    setStarting(true);
+    setStartError(null);
     let firstId: string | null = null;
     const failures: string[] = [];
     for (const item of picked) {
@@ -127,97 +132,74 @@ export default function NewScan() {
     setStarting(false);
   };
 
-  const step = picked.length === 0 ? 1 : starting ? 3 : 2;
-
   return (
     <>
-      <div className="hero">
-        <h1 className="page-title">Audit a project</h1>
-        <p className="page-sub">
-          Point the scanner at any folder on this machine, pick what to audit, and
-          launch. The analysis only <i>reads</i> files — it never runs the code,
-          never talks to the internet, and never touches credential files.
-        </p>
-        <div className="steps-rail">
-          <div className={`step-chip ${step === 1 ? "active" : step > 1 ? "done" : ""}`}>
-            <span className="n">{step > 1 ? "✓" : "1"}</span> Choose folders
-          </div>
-          <div className="step-line" />
-          <div className={`step-chip ${step === 2 ? "active" : step > 2 ? "done" : ""}`}>
-            <span className="n">{step > 2 ? "✓" : "2"}</span> Review scope
-          </div>
-          <div className="step-line" />
-          <div className={`step-chip ${step === 3 ? "active" : ""}`}>
-            <span className="n">3</span> Launch audit
-          </div>
-        </div>
-      </div>
+      <h1 className="page-title">Audit a Project</h1>
+      <p className="page-sub">Point the scanner at a folder. Code is only read — never executed.</p>
 
-      {/* ---- location bar -------------------------------------------------- */}
-      <div className="card">
-        <div className="row spread">
-          <div>
-            <h3>📍 Where are your projects?</h3>
-            <p className="hint" style={{ marginBottom: 0 }}>
-              Audits happen inside one approved root. Currently:{" "}
-              <b className="mono">{scanRoot ?? "…"}</b>
-            </p>
-          </div>
-          <button onClick={() => setShowRootEditor((v) => !v)}>
-            {showRootEditor ? "Cancel" : "Change root"}
-          </button>
+      {/* Scan root tile */}
+      <div className="tile">
+        <h3>Scan Root</h3>
+        <div style={{ marginBottom: "var(--space-md)" }}>
+          <span className="mono small" style={{ color: "var(--accent)" }}>{scanRoot ?? "—"}</span>
+        </div>
+        <div className="row" style={{ gap: "var(--space-md)" }}>
+          <button onClick={() => setShowRootEditor(true)} className="btn-ghost">Change Root</button>
         </div>
         {showRootEditor && (
-          <div style={{ marginTop: 12 }}>
-            <div className="row">
+          <div style={{ marginTop: "var(--space-lg)" }}>
+            <div className="form-group" style={{ marginBottom: "var(--space-md)" }}>
+              <label>Root Folder Path</label>
               <input
                 type="text"
                 value={rootInput}
                 autoFocus
-                placeholder="e.g. C:\Users\you\my-projects  or  /home/you/repos"
+                placeholder="Enter folder path"
                 onChange={(e) => setRootInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") applyRoot(); }}
-                style={{ flex: 1, minWidth: 260 }}
+                style={{ flex: 1 }}
               />
-              <button className="btn-primary" onClick={applyRoot} disabled={settingRoot || !rootInput.trim()}>
-                {settingRoot ? (<><Spinner /> Setting…</>) : "Use this folder"}
-              </button>
             </div>
-            <p className="hint" style={{ marginTop: 6 }}>
-              Tip: pick a parent folder that holds several projects — you can then
-              audit any of them (or many at once) without coming back here.
-            </p>
+            <div className="row" style={{ gap: "var(--space-md)" }}>
+              <button className="btn-primary" onClick={applyRoot} disabled={settingRoot || !rootInput.trim()}>
+                {settingRoot ? (<><Spinner /> Setting…</>) : "Save Root"}
+              </button>
+              <p className="muted small" style={{ marginLeft: "var(--space-md)", marginTop: "var(--space-xs)" }}>
+                Pick a parent folder holding your projects.
+              </p>
+            </div>
             {rootError ? <ErrorBanner error={rootError} /> : null}
           </div>
         )}
+        {rootSaved && (
+          <p style={{ marginTop: "var(--space-sm)", fontSize: "12px", fontWeight: 700, color: "var(--ok)" }}>✓ Scan root updated.</p>
+        )}
       </div>
 
-      {/* ---- folder browser ------------------------------------------------ */}
-      <div className="card">
-        <div className="row spread" style={{ marginBottom: 10 }}>
-          <div className="crumbs">
-            <button className="crumb" onClick={() => goToCrumb("")}>🏠 root</button>
-            {crumbs.map((c) => (
-              <span key={c.path} style={{ display: "inline-flex", alignItems: "center" }}>
-                <span className="crumb-sep">›</span>
-                <button className="crumb" onClick={() => goToCrumb(c.path)}>{c.name}</button>
-              </span>
-            ))}
-          </div>
-          <div className="row">
-            {dir && (
-              <button onClick={goUp}>↑ Up</button>
-            )}
-            {dir && !isPicked(dir) && (
-              <button className="btn-primary" onClick={() => pick(dir)}>＋ Audit this folder</button>
-            )}
-            {dir && isPicked(dir) && (
-              <span className="badge ok">✓ in selection</span>
-            )}
-          </div>
+      {/* Folder browser tile */}
+      <div className="tile">
+        <h3>Select Folders</h3>
+        <div className="crumbs">
+          <button className="crumb" onClick={() => goToCrumb("")}>Root</button>
+          {crumbs.map((c) => (
+            <span key={c.path} style={{ display: "inline-flex", alignItems: "center" }}>
+              <span className="crumb-sep">›</span>
+              <button className="crumb" onClick={() => goToCrumb(c.path)}>{c.name}</button>
+            </span>
+          ))}
+        </div>
+        <div style={{ marginTop: "var(--space-md)", display: "flex", alignItems: "center", gap: "var(--space-sm)", flexWrap: "wrap" }}>
+          {dir && <button onClick={goUp}>↑ Up</button>}
+          {dir && !isPicked(dir) && (
+            <button className="btn-primary" onClick={() => pick(dir)}>Audit This Folder</button>
+          )}
+          {dir && isPicked(dir) && (
+            <span className="badge ok">Selected</span>
+          )}
         </div>
 
         {browseError ? <ErrorBanner error={browseError} /> : null}
+
         {!listing ? (
           <p><Spinner /> Reading folder…</p>
         ) : listing.directories.length === 0 ? (
@@ -227,27 +209,30 @@ export default function NewScan() {
             <div className="small">
               {dir
                 ? "Go up one level, or select this folder itself for auditing."
-                : "The approved root is empty — use “Change root” above to point at your projects."}
+                : "The scan root is empty. Change root to point at your projects."}
             </div>
           </div>
         ) : (
-          <div className="folder-grid">
+          <div style={{ display: "grid", gap: "var(--space-md)", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
             {listing.directories.map((d) => {
               const p = dir ? `${dir}/${d}` : d;
               const chosen = isPicked(p);
               return (
-                <div key={d} className={`folder-tile ${chosen ? "chosen" : ""}`}>
-                  <button className="tile-open" onClick={() => goInto(d)} title={`Open ${d}`}>
-                    <span className="tile-icon">📁</span>
-                    <span className="tile-name">{d}</span>
-                  </button>
-                  <button
-                    className={`tile-select ${chosen ? "on" : ""}`}
-                    onClick={() => (chosen ? unpick(p) : pick(p))}
-                    title={chosen ? "Remove from selection" : "Add to audit selection"}
-                  >
-                    {chosen ? "✓" : "＋"}
-                  </button>
+                <div key={d} className={`tile ${chosen ? "chosen" : ""}`}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
+                    <span style={{ fontSize: 20 }}>{chosen ? "✓" : "📁"}</span>
+                    <span className="mono" style={{ flex: 1, fontSize: "13px" }}>{d}</span>
+                    <button
+                      className="btn-ghost"
+                      onClick={() => (chosen ? unpick(p) : pick(p))}
+                      title={chosen ? "Remove from selection" : "Add to selection"}
+                    >
+                      {chosen ? "✕" : "+"}
+                    </button>
+                  </div>
+                  <div className="tile-body">
+                    <span className="muted small">{chosen ? "Selected for auditing" : "Click to add"}</span>
+                  </div>
                 </div>
               );
             })}
@@ -255,61 +240,50 @@ export default function NewScan() {
         )}
       </div>
 
-      {/* ---- selection tray ------------------------------------------------ */}
-      <div className="tray">
-        <div className="tray-inner">
-          <div className="tray-chips">
-            {picked.length === 0 ? (
-              <span className="muted small">Nothing selected yet — click ＋ on folders above.</span>
-            ) : (
-              picked.map((item) => (
-                <span key={item.path} className="chip" title={item.path}>
+      {/* Selection & launch tile */}
+      <div className="tile">
+        <h3>Launch Audit</h3>
+        <div style={{ marginBottom: "var(--space-md)" }}>
+          {picked.length === 0 ? (
+            <span className="muted small">Nothing selected yet — click folders above.</span>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-sm)" }}>
+              {picked.map((item) => (
+                <span key={item.path} className="badge ok" style={{ fontSize: "11px", padding: "4px 10px" }}>
                   📁 {item.name}
-                  {item.preview ? (
-                    <span className="chip-meta">
-                      {item.preview.source_files} src · {item.preview.total_files} files
-                    </span>
-                  ) : item.previewError ? (
-                    <span className="chip-meta" style={{ color: "var(--bad)" }}>preview failed</span>
-                  ) : (
-                    <Spinner />
-                  )}
-                  <button className="chip-x" onClick={() => unpick(item.path)} title="Remove">✕</button>
                 </span>
-              ))
-            )}
-          </div>
-          <div className="row" style={{ gap: 14 }}>
-            <label className="small" style={{ cursor: "pointer", whiteSpace: "nowrap" }}>
-              <input
-                type="checkbox"
-                checked={investigate}
-                onChange={(e) => setInvestigate(e.target.checked)}
-                style={{ marginRight: 6 }}
-              />
-              🤖 AI investigation{!aiReady && <span className="muted"> (not configured)</span>}
-            </label>
-            <button
-              className="btn-launch"
-              onClick={startAudit}
-              disabled={starting || picked.length === 0}
-            >
-              {starting
-                ? (<><Spinner /> Launching…</>)
-                : picked.length > 1
-                  ? `🚀 Start audit — ${picked.length} folders`
-                  : "🚀 Start audit"}
-            </button>
-          </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="form-group" style={{ marginBottom: "var(--space-lg)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", cursor: "pointer", fontSize: "13px" }}>
+            <input
+              type="checkbox"
+              checked={investigate}
+              onChange={(e) => setInvestigate(e.target.checked)}
+              style={{ margin: 0 }}
+            />
+            AI Investigation {!aiReady && <span className="muted">(not configured)</span>}
+          </label>
+        </div>
+        <div className="row">
+          <button
+            className="btn-primary"
+            onClick={startAudit}
+            disabled={starting || picked.length === 0}
+          >
+            {starting ? (<><Spinner /> Launching…</>) : `🚀 Start Audit${picked.length > 1 ? ` — ${picked.length} Folders` : ""}`}
+          </button>
         </div>
         {startError ? <ErrorBanner error={startError} /> : null}
         {picked.length > 1 && !starting && (
-          <p className="hint" style={{ margin: "8px 2px 0" }}>
-            Each folder gets its own audit; you'll be taken to the first one and the
-            rest will run in the background (see Overview).
+          <p className="muted small" style={{ marginTop: "var(--space-sm)" }}>
+            Each folder gets its own audit. You'll be taken to the first one.
           </p>
         )}
       </div>
+
     </>
   );
 }

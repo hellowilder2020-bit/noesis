@@ -3,53 +3,14 @@ import { api, QualityCheck, QualityState } from "../api";
 import { ErrorBanner, Spinner } from "../ui";
 
 const CATEGORY_INFO: Record<string, { title: string; blurb: string }> = {
-  "environment": {
-    title: "Environment",
-    blurb: "Is the tooling ready to run at all?",
-  },
-  "path-safety": {
-    title: "Path safety",
-    blurb: "Can the system actually be fooled into scanning outside its folder? These checks try real attacks and verify they are rejected.",
-  },
-  "discovery": {
-    title: "File discovery",
-    blurb: "Does the file reader ignore the things it should (dependencies, caches, credential files) and read only what it should?",
-  },
-  "detection": {
-    title: "Detection rules",
-    blurb: "Known-vulnerable test snippets must be flagged, and their safe twins must be left alone.",
-  },
-  "benchmark": {
-    title: "Benchmark project",
-    blurb: "Every planted vulnerability in the sample project must be caught, and every safe block must stay clean.",
-  },
+  "environment": { title: "Environment", blurb: "Tooling ready to run?" },
+  "path-safety": { title: "Path Safety", blurb: "Scanning restricted to approved folders." },
+  "discovery": { title: "File Discovery", blurb: "Correct files read, caches ignored." },
+  "detection": { title: "Detection Rules", blurb: "Vulnerable snippets flagged, safe twins ignored." },
+  "benchmark": { title: "Benchmark Project", blurb: "Planted vulnerabilities caught, safe blocks clean." },
 };
 
 const CATEGORY_ORDER = ["environment", "path-safety", "discovery", "detection", "benchmark"];
-
-function CheckRow({ c }: { c: QualityCheck }) {
-  const icon = c.skipped ? "⏭️" : c.passed ? "✅" : "❌";
-  return (
-    <div className="check-row">
-      <div className="check-head">
-        <span>{icon}</span>
-        <span className="check-title">{c.title}</span>
-        {c.detail ? null : null}
-      </div>
-      <details className="check-detail">
-        <summary>More about this check</summary>
-        <div className="body">
-          <p>{c.description}</p>
-          <dl>
-            <dt>Expected</dt><dd>{c.expected}</dd>
-            <dt>Observed</dt><dd style={c.passed ? undefined : { color: "var(--bad)" }}>{c.actual}</dd>
-            {c.detail ? <><dt>Why it matters</dt><dd>{c.detail}</dd></> : null}
-          </dl>
-        </div>
-      </details>
-    </div>
-  );
-}
 
 export default function Quality() {
   const [state, setState] = useState<QualityState | null>(null);
@@ -74,7 +35,8 @@ export default function Quality() {
   }, []);
 
   const run = async () => {
-    setKicking(true); setError(null);
+    setKicking(true);
+    setError(null);
     try {
       await api.runQuality();
       setState({ status: "running", checks: [] });
@@ -85,7 +47,7 @@ export default function Quality() {
     }
   };
 
-  if (error) return <><h1 className="page-title">Scanner Health Check</h1><ErrorBanner error={error} /></>;
+  if (error) return <ErrorBanner error={error} />;
   if (!state) return <p><Spinner /> Loading health-check results…</p>;
 
   const groups = new Map<string, QualityCheck[]>();
@@ -98,74 +60,94 @@ export default function Quality() {
   return (
     <>
       <h1 className="page-title">Scanner Health Check</h1>
-      <p className="page-sub">
-        <b>What went right and what went wrong</b> — this page runs a live test
-        battery against the scanning engine itself and reports honest pass/fail
-        results. Nothing is simulated: failing checks mean the tool is not yet
-        trustworthy, and we show that.
-      </p>
+      <p className="page-sub">Live test battery against the scanning engine. Honest pass/fail results.</p>
 
-      <div className="card">
-        <div className="row spread">
-          <div>
-            <h3>Latest run</h3>
-            <p className="hint" style={{ margin: 0 }}>
-              {state.status === "idle" && "No run yet. Press the button to run all checks (takes ~1–2 minutes; it runs real scans)."}
-              {state.status === "running" && <><Spinner /> Checks are running right now — page updates automatically…</>}
-              {state.status === "done" && <>Completed in {Math.round((state.duration_ms ?? 0) / 1000)}s.</>}
-              {state.status === "error" && `Run failed: ${state.error}`}
-            </p>
-          </div>
-          <button className="btn-primary" onClick={run} disabled={kicking || state.status === "running"}>
-            ▶ Run all checks
-          </button>
+      {/* Status tile */}
+      <div className="tile">
+        <h3>Latest Run</h3>
+        <div className="row" style={{ marginBottom: "var(--space-md)" }}>
+          <span className="status-pill"
+            style={{
+              borderColor: state.status === "done" ? "var(--ok)" : state.status === "running" ? "var(--accent)" : state.status === "error" ? "var(--bad)" : "var(--text-soft)",
+              color: state.status === "done" ? "var(--ok)" : state.status === "running" ? "var(--accent)" : state.status === "error" ? "var(--bad)" : "var(--text-soft)",
+            }}
+          >
+            {state.status}
+          </span>
+          <span className="mono small muted" style={{ marginLeft: "var(--space-md)" }}>
+            {state.status === "running" ? "Checks running — page updates automatically…" :
+              state.status === "done" ? `Completed in ${Math.round((state.duration_ms ?? 0) / 1000)}s.` :
+              state.status === "error" ? `Run failed: ${state.error}` : "No run yet."}
+          </span>
         </div>
         {state.status === "done" && state.summary && (
-          <div className="row" style={{ marginTop: 10 }}>
-            <span className="badge ok">✅ {state.summary.passed} passed</span>
-            {state.summary.failed > 0
-              ? <span className="badge bad">❌ {state.summary.failed} failed</span>
-              : <span className="badge plain">0 failed</span>}
-            {state.summary.skipped
-              ? <span className="badge plain">⏭️ {state.summary.skipped} skipped</span>
-              : null}
+          <div className="row" style={{ gap: "var(--space-md)", flexWrap: "wrap" }}>
+            <span className="badge ok">✓ {state.summary.passed} passed</span>
+            {state.summary.failed > 0 && <span className="badge bad">✗ {state.summary.failed} failed</span>}
+            {state.summary.skipped && <span className="badge plain">⏭ {state.summary.skipped} skipped</span>}
           </div>
         )}
+        <button className="btn-primary" onClick={run} disabled={kicking || state.status === "running"}>
+          {kicking ? (<><Spinner /> Running…</>) : state.status === "running" ? "Checks Running…" : "Run All Checks"}
+        </button>
       </div>
 
-      {state.checks.length === 0 && state.status !== "running" ? (
-        <div className="callout info">
-          <b>Nothing to show yet</b>
-          Run the checks to see a full breakdown here.
-        </div>
-      ) : (
-        CATEGORY_ORDER.filter((cat) => groups.has(cat)).map((cat) => {
+      {/* Check category tiles */}
+      <div className="tile-grid">
+        {CATEGORY_ORDER.filter((cat) => groups.has(cat)).map((cat) => {
           const info = CATEGORY_INFO[cat] ?? { title: cat, blurb: "" };
           const checks = groups.get(cat)!;
           const passed = checks.filter((c) => c.passed).length;
-          const skipped = checks.filter((c) => c.skipped).length;
+          const failed = checks.filter((c) => !c.passed && !c.skipped).length;
+
           return (
-            <div className="card" key={cat}>
-              <div className="row spread">
+            <div key={cat} className="tile">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-md)" }}>
                 <h3>{info.title}</h3>
-                <span className={`badge ${passed + skipped === checks.length ? "ok" : "warn"}`}>
-                  {passed}/{checks.length} passed{skipped > 0 ? ` (${skipped} skipped)` : ""}
+                <span className={`badge ${passed === checks.length ? "ok" : failed > 0 ? "bad" : "warn"}`}>
+                  {passed}/{checks.length}
                 </span>
               </div>
-              <p className="hint">{info.blurb}</p>
-              {checks.map((c) => <CheckRow key={c.id} c={c} />)}
+              <p className="muted small" style={{ marginBottom: "var(--space-md)" }}>{info.blurb}</p>
+              {checks.map((c) => (
+                <div key={c.id} style={{ marginBottom: "var(--space-md)", padding: "var(--space-sm)", background: "rgba(255,255,255,0.03)", borderRadius: "var(--radius-sm)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    <span style={{ fontSize: 14, flex: "0 0 auto" }}>
+                      {c.skipped ? "⏭" : c.passed ? "✓" : "✗"}
+                    </span>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)", flex: 1 }}>{c.title}</span>
+                    <span className={`badge ${c.passed ? "ok" : c.skipped ? "plain" : "bad"}`} style={{ fontSize: "10px" }}>
+                      {c.passed ? "passed" : c.skipped ? "skipped" : "failed"}
+                    </span>
+                  </div>
+                  <details style={{ marginTop: "var(--space-sm)" }}>
+                    <summary style={{ cursor: "pointer", color: "var(--accent)", fontSize: "11px", marginTop: "var(--space-xs)" }}>More details</summary>
+                    <div style={{ marginTop: "var(--space-sm)" }}>
+                      <dl style={{ margin: 0, fontSize: "11px", color: "var(--text-soft)", display: "grid", gridTemplateColumns: "auto 1fr", gap: "2px 12px" }}>
+                        <dt>Description</dt><dd>{c.description}</dd>
+                        <dt>Expected</dt><dd>{c.expected}</dd>
+                        <dt>Observed</dt><dd style={{ color: c.passed ? "var(--ok)" : "var(--bad)" }}>{c.actual}</dd>
+                      </dl>
+                    </div>
+                  </details>
+                </div>
+              ))}
             </div>
           );
-        })
-      )}
-
-      <div className="callout info">
-        <b>How to read this page</b>
-        Green rows are proofs that a protection or detection behaviour works.
-        Red rows are real defects or gaps we know about. Candidates on the audit
-        pages are “worth looking at”, findings are “confirmed problems” — this
-        page tells you how much you can lean on that distinction so far.
+        })}
       </div>
+
+      <div style={{ marginTop: "var(--space-xl)" }}>
+        <div className="callout" style={{ background: "rgba(52,211,153,0.08)", borderColor: "var(--ok)", color: "var(--ok)" }}>
+          <span style={{ display: "block", fontWeight: 700, marginBottom: "var(--space-sm)", textTransform: "uppercase", letterSpacing: 0.06, fontSize: "11px" }}>How to Read This Page</span>
+          <span style={{ fontSize: "13px", lineHeight: 1.6 }}>
+            Green rows prove a protection works. Red rows are real defects or gaps we know about.
+            Scanner candidates are “worth looking at”; findings are “confirmed problems” — this page
+            tells you how much you can lean on that distinction.
+          </span>
+        </div>
+      </div>
+
     </>
   );
 }

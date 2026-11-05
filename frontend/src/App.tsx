@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState } from "react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
@@ -9,94 +9,10 @@ import Quality from "./pages/Quality";
 import Settings from "./pages/Settings";
 import "./styles.css";
 
-// Profile menu component
-function ProfileMenu({ onSettingsClick, onBackupClick, onRestoreClick }: { 
-  onSettingsClick: () => void;
-  onBackupClick: () => void;
-  onRestoreClick: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [showRestore, setShowRestore] = useState(false);
-  const [restoreFile, setRestoreFile] = useState<File | null>(null);
-  const [restoreStatus, setRestoreStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
-
-  const handleRestore = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!restoreFile) return;
-    setRestoreStatus("uploading");
-    try {
-      const text = await restoreFile.text();
-      const data = JSON.parse(text);
-      const res = await fetch("/api/settings/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data }),
-      });
-      if (!res.ok) throw new Error("Restore failed");
-      setRestoreStatus("success");
-      setShowRestore(false);
-      setRestoreFile(null);
-      setTimeout(() => setRestoreStatus("idle"), 2000);
-      alert("Backup restored successfully! Please refresh the page.");
-    } catch (err) {
-      setRestoreStatus("error");
-      setTimeout(() => setRestoreStatus("idle"), 3000);
-    }
-  }, [restoreFile]);
-
-  return (
-    <div className="profile-menu">
-      <button className="profile-btn" onClick={() => setOpen(!open)} aria-label="Profile menu">
-        ⚙️
-      </button>
-      {open && (
-        <div className="profile-dropdown">
-          <div className="profile-header">
-            <span>AI Pentester</span>
-            <span className="version">v0.1.0</span>
-          </div>
-          <hr />
-          <button className="dropdown-item" onClick={() => { setOpen(false); onSettingsClick(); }}>
-            🔑 AI Settings
-          </button>
-          <button className="dropdown-item" onClick={() => { setOpen(false); onBackupClick(); }}>
-            💾 Download Backup
-          </button>
-          <button className="dropdown-item" onClick={() => { setOpen(false); setShowRestore(true); }}>
-            📥 Restore Backup
-          </button>
-        </div>
-      )}
-      
-      {showRestore && (
-        <div className="modal-overlay" onClick={() => { setShowRestore(false); setRestoreFile(null); }}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>Restore Backup</h3>
-            <p>Select a backup JSON file to restore. This will overwrite all existing data.</p>
-            <form onSubmit={handleRestore}>
-              <input 
-                type="file" 
-                accept=".json" 
-                onChange={e => setRestoreFile(e.target.files?.[0] || null)} 
-                required
-              />
-              <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => { setShowRestore(false); setRestoreFile(null); }}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" disabled={!restoreFile || restoreStatus === "uploading"}>
-                  {restoreStatus === "uploading" ? "Restoring..." : "Restore"}
-                </button>
-              </div>
-              {restoreStatus === "error" && <p className="error">Restore failed. Check file format.</p>}
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
+/* ---------------------------------------------------------------------------
+   Layout shell — fixed sidebar + main content
+   Navigation items separated: primary section + bottom utility section
+--------------------------------------------------------------------------- */
 function Layout({ children }: { children: React.ReactNode }) {
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [aiProvider, setAiProvider] = useState("");
@@ -124,7 +40,6 @@ function Layout({ children }: { children: React.ReactNode }) {
       setTimeout(() => setAiSettingsStatus("idle"), 2000);
     } catch {
       setAiSettingsStatus("error");
-      setTimeout(() => setAiSettingsStatus("idle"), 3000);
     }
   };
 
@@ -148,85 +63,78 @@ function Layout({ children }: { children: React.ReactNode }) {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <span className="logo">🛡</span> AI Pentester
+          <span className="logo">A</span> AI Pentester
         </div>
-        <NavLink to="/" end className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
-          🏠 Overview
-        </NavLink>
-        <NavLink to="/scan" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
-          📂 Audit a project
-        </NavLink>
-        <NavLink to="/quality" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
-          🧪 Scanner Health Check
-        </NavLink>
-        <NavLink to="/settings" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
-          ⚙️ Settings
-        </NavLink>
+        <nav className="nav">
+          {/* Primary navigation section */}
+          <div className="nav-section">
+            <div className="nav-title">Platform</div>
+            <NavLink to="/" end className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
+              Security Overview
+            </NavLink>
+            <NavLink to="/scan" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
+              Audit a Project
+            </NavLink>
+            <NavLink to="/quality" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
+              Scanner Health Check
+            </NavLink>
+          </div>
+
+          <div className="nav-divider" />
+
+          {/* Bottom utility section */}
+          <div className="nav-section">
+            <div className="nav-title">Settings</div>
+            <NavLink to="/settings" className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
+              Settings
+            </NavLink>
+          </div>
+        </nav>
         <div className="sidebar-foot">
-          Source-code security auditing. Nothing is executed — code is only
-          read and analysed as text.
+          <button className="settings-btn" onClick={() => setShowAiSettings(true)} title="Settings">
+            ⚙
+          </button>
+          <div style={{ marginTop: 12, color: "var(--text-dim)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+            Source-code security auditing. Code is only read — never executed.
+          </div>
         </div>
       </aside>
       <main className="content">
-        <header className="content-header">
-          <ProfileMenu 
-            onSettingsClick={() => setShowAiSettings(true)}
-            onBackupClick={handleBackup}
-            onRestoreClick={() => {}}
-          />
-        </header>
         {children}
         
         {showAiSettings && (
           <div className="modal-overlay" onClick={() => setShowAiSettings(false)}>
-            <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
               <h3>AI Provider Settings</h3>
-              <p>Configure your AI provider for vulnerability investigation. Supports OpenAI-compatible APIs (OpenRouter, NVIDIA, Ollama, LM Studio, etc.) and Anthropic.</p>
+              <p>Configure your AI provider for vulnerability investigation.</p>
               <div className="form-group">
                 <label>Provider</label>
                 <select value={aiProvider} onChange={e => setAiProvider(e.target.value)}>
-                  <option value="openai_compatible">OpenAI Compatible (OpenRouter, NVIDIA, Ollama, LM Studio, etc.)</option>
+                  <option value="openai_compatible">OpenAI Compatible</option>
                   <option value="anthropic">Anthropic (Claude)</option>
                   <option value="openrouter">OpenRouter</option>
-                  <option value="nvidia">NVIDIA</option>
-                  <option value="omnirouter">OmniRouter</option>
                   <option value="none">Disabled</option>
                 </select>
               </div>
               <div className="form-group">
                 <label>Model</label>
-                <input 
-                  type="text" 
-                  value={aiModel} 
-                  onChange={e => setAiModel(e.target.value)} 
-                  placeholder="e.g. gpt-4o, claude-3-5-sonnet, nvidia/nemotron-3-ultra"
-                />
+                <input type="text" value={aiModel} onChange={e => setAiModel(e.target.value)} placeholder="e.g. claude-3-5-sonnet" />
               </div>
               <div className="form-group">
-                <label>Base URL (for OpenAI-compatible)</label>
-                <input 
-                  type="text" 
-                  value={aiBaseUrl} 
-                  onChange={e => setAiBaseUrl(e.target.value)} 
-                  placeholder="e.g. https://openrouter.ai/api/v1, http://localhost:11434/v1"
-                />
+                <label>Base URL</label>
+                <input type="text" value={aiBaseUrl} onChange={e => setAiBaseUrl(e.target.value)} placeholder="e.g. https://api.anthropic.com" />
               </div>
               <div className="form-group">
                 <label>API Key</label>
-                <input 
-                  type="password" 
-                  value={aiApiKey} 
-                  onChange={e => setAiApiKey(e.target.value)} 
-                  placeholder="Enter your API key (stored encrypted)"
-                />
+                <input type="password" value={aiApiKey} onChange={e => setAiApiKey(e.target.value)} placeholder="Enter API key" />
               </div>
               <div className="modal-actions">
                 <button className="btn-secondary" onClick={() => setShowAiSettings(false)}>Cancel</button>
                 <button className="btn-primary" onClick={handleAiSettingsSave} disabled={aiSettingsStatus === "saving"}>
-                  {aiSettingsStatus === "saving" ? "Saving..." : "Save"}
+                  {aiSettingsStatus === "saving" ? "Saving…" : "Save"}
                 </button>
               </div>
-              {aiSettingsStatus === "success" && <p className="success">Settings saved!</p>}
+              {aiSettingsStatus === "success" && <p className="ok">Settings saved!</p>}
               {aiSettingsStatus === "error" && <p className="error">Failed to save settings.</p>}
             </div>
           </div>
